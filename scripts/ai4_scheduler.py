@@ -7,8 +7,6 @@ AI4 — 일별 학습 스케줄러 (FSRS + IRT)
 import os, sys, json, math, logging, argparse
 from datetime import datetime, timedelta, date
 
-import numpy as np
-
 os.makedirs("output", exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
@@ -259,7 +257,7 @@ def build_daily_schedule(rated_words: dict, user_profile: dict, daily_limit: int
 
 # ── 세션 결과 처리 ───────────────────────────────────────────────────────────
 
-def process_session_result(session_path: str) -> None:
+def process_session_result(session_path: str) -> dict:
     for path, label in [
         ("output/rated_words.json", "rated_words.json"),
         ("output/user_profile.json", "user_profile.json"),
@@ -292,7 +290,9 @@ def process_session_result(session_path: str) -> None:
             card["learned"] = True
         elif card["fsrs"].get("state") == "learning":
             # 학습 단계 재제출 — full review 공식 대신 init으로 재평가
+            prev_count = card["fsrs"]["review_count"]
             card["fsrs"] = init_fsrs_card(rating_given, today)
+            card["fsrs"]["review_count"] = prev_count + 1
             card["fsrs"]["first_exposure"] = False  # 첫 노출이 아님
         else:
             card["fsrs"] = process_review(card["fsrs"], rating_given, today)
