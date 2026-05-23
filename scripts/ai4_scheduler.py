@@ -173,6 +173,18 @@ def save_json(path: str, data: dict) -> None:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
+# ── Optimizer 데이터 ─────────────────────────────────────────────────────────
+
+def get_optimizer_reviews(rated_words: dict) -> list:
+    """첫 노출(first_exposure=True) 제거 후 optimizer에 넘길 카드 목록 반환.
+    optimizer는 실제 복습 이력이 있는 카드만 학습해야 함."""
+    return [
+        w for w in rated_words["words"]
+        if w.get("learned") and w.get("fsrs")
+        and not w["fsrs"].get("first_exposure", False)
+    ]
+
+
 # ── Oxford DB 보충 ───────────────────────────────────────────────────────────
 
 def get_oxford_supplement(user_rating: int, count: int, exclude_words: set) -> list:
@@ -281,6 +293,7 @@ def process_session_result(session_path: str) -> None:
         elif card["fsrs"].get("state") == "learning":
             # 학습 단계 재제출 — full review 공식 대신 init으로 재평가
             card["fsrs"] = init_fsrs_card(rating_given, today)
+            card["fsrs"]["first_exposure"] = False  # 첫 노출이 아님
         else:
             card["fsrs"] = process_review(card["fsrs"], rating_given, today)
 
