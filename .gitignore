@@ -4,8 +4,10 @@
 # Oxford DB 원본 (저작권)
 data/
 
-# AI3 실행 결과 (용량 큰 바이너리/JSON)
-models/
+# AI3 실행 결과 — refined_db와 embeddings_cache만 추적
+models/*
+!models/refined_db.json
+!models/embeddings_cache.pkl
 
 # 사용자 데이터 및 결과물
 output/
