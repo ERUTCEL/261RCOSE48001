@@ -1,0 +1,28 @@
+# 환경변수 (API 키 포함)
+.env
+
+# Oxford DB 원본 (저작권)
+data/
+
+# AI3 실행 결과 (용량 큰 바이너리/JSON)
+models/
+
+# 사용자 데이터 및 결과물
+output/
+input/
+
+# Python 캐시
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# 가상환경
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
