@@ -278,6 +278,9 @@ def process_session_result(session_path: str) -> None:
         if not card.get("learned"):
             card["fsrs"] = init_fsrs_card(rating_given, today)
             card["learned"] = True
+        elif card["fsrs"].get("state") == "learning":
+            # 학습 단계 재제출 — full review 공식 대신 init으로 재평가
+            card["fsrs"] = init_fsrs_card(rating_given, today)
         else:
             card["fsrs"] = process_review(card["fsrs"], rating_given, today)
 
