@@ -2,7 +2,7 @@
 FastAPI Unity 브릿지 서버
 uvicorn unity_bridge.server:app --host 0.0.0.0 --port 8000 --reload
 """
-import json, os, re, subprocess, sys
+import json, math, os, re, subprocess, sys
 from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
@@ -14,6 +14,20 @@ from pydantic import BaseModel
 
 # 스크립트 루트를 이 파일 기준으로 결정 (unity_bridge/ 의 부모)
 ROOT = Path(__file__).parent.parent
+
+def _get_k(total_sessions: int) -> int:
+    if total_sessions <= 5:
+        return 100
+    elif total_sessions <= 20:
+        return 50
+    return 20
+
+
+def _irt_update(user_rating: int, word_rating: int, correct: bool, k: int) -> int:
+    expected = 1.0 / (1.0 + math.exp(-(user_rating - word_rating) / 150.0))
+    actual = 1 if correct else 0
+    return round(user_rating + k * (actual - expected))
+
 
 app = FastAPI(title="Vocab Rating System", version="1.0.0")
 
@@ -177,8 +191,15 @@ def cat_answer(body: CatAnswer):
 
 
 @app.get("/api/schedule/today")
-def get_today_schedule(daily_limit: int = Query(default=100, ge=1, le=1000)):
-    """오늘의 학습 스케줄 반환"""
+def get_today_schedule(
+    daily_limit: int = Query(default=100, ge=1, le=1000),
+    total_words: int | None = Query(default=None, ge=1),
+    days: int | None = Query(default=None, ge=1),
+):
+    """오늘의 학습 스케줄 반환. total_words+days 모두 있으면 daily_limit 자동 계산."""
+    if total_words is not None and days is not None:
+        daily_new = total_words / days
+        daily_limit = round(daily_new / (1 - 0.4))
     result = run_script(
         "scripts/ai4_scheduler.py",
         "--today-only",
@@ -223,7 +244,7 @@ def get_all_words():
 
 @app.post("/api/session/checkpoint")
 def session_checkpoint(body: SessionCheckpoint):
-    """세션 중간 정답률 → 남은 단어풀 난이도 재정렬"""
+    """세션 중간 정답률 → 남은 단어풀 난이도 재정렬 + user_rating 실시간 업데이트"""
     if not body.answers:
         raise HTTPException(400, detail="answers가 비어있습니다.")
 
@@ -234,6 +255,15 @@ def session_checkpoint(body: SessionCheckpoint):
     user_rating = profile["user_rating"]
     word_rating = {w["word"]: w["rating"] for w in rated["words"]}
     remaining = list(body.remaining_words)
+
+    # IRT 실시간 업데이트
+    k = _get_k(profile.get("total_sessions", 0))
+    for a in body.answers:
+        if a.correct is not None:
+            wr = word_rating.get(a.word, user_rating)
+            user_rating = _irt_update(user_rating, wr, a.correct, k)
+    profile["user_rating"] = user_rating
+    save_json("output/user_profile.json", profile)
 
     if accuracy > 0.75:
         # 어려운 단어 우선 (userRating+100 이상 앞으로)
@@ -264,6 +294,7 @@ def session_checkpoint(body: SessionCheckpoint):
     return {
         "accuracy": round(accuracy, 3),
         "user_rating": user_rating,
+        "updated_user_rating": user_rating,
         "mode": mode,
         "remaining_words": remaining,
     }

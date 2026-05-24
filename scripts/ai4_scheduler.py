@@ -4,7 +4,7 @@ AI4 — 일별 학습 스케줄러 (FSRS + IRT)
 --days N    --daily-limit N   : N일 플랜 (오늘 스케줄 저장)
 --submit-result <path>        : 세션 결과 처리 → FSRS + userRating 업데이트
 """
-import os, sys, json, math, logging, argparse
+import os, sys, json, math, logging, argparse, copy
 from datetime import datetime, timedelta, date
 from scipy.optimize import minimize
 
@@ -109,6 +109,7 @@ def init_fsrs_card(rating: int, today: date) -> dict:
         "state": state,
         "last_review": today.isoformat(),
         "first_exposure": True,
+        "review_history": [[0, rating]],
     }
 
 
@@ -157,6 +158,11 @@ def update_user_rating(user_rating: int, word_rating: int, correct: bool, k: int
     expected = 1.0 / (1.0 + math.exp(-(user_rating - word_rating) / 150.0))
     actual = 1 if correct else 0
     return round(user_rating + k * (actual - expected))
+
+
+def calculate_daily_limit(total_words: int, days: int, avg_review_ratio: float = 0.4) -> int:
+    daily_new = total_words / days
+    return round(daily_new / (1 - avg_review_ratio))
 
 
 # ── 파일 유틸 ────────────────────────────────────────────────────────────────
@@ -477,15 +483,27 @@ def main(args) -> None:
     else:
         days = args.days
         logger.info(f"{days}일 플랜 미리보기 생성 (파일은 오늘 스케줄만 저장)")
+        sim_rated = copy.deepcopy(rated_words)
+        sim_word_map = {w["word"]: w for w in sim_rated["words"]}
         for d in range(days):
             target_date = today + timedelta(days=d)
-            sched = build_daily_schedule(rated_words, user_profile, daily_limit, target_date)
+            sched = build_daily_schedule(sim_rated, user_profile, daily_limit, target_date)
             if d == 0:
                 save_json("output/daily_schedule.json", sched)
             logger.info(
                 f"  {target_date}: 신규={sched['stats']['new_count']}, "
                 f"복습={sched['stats']['review_count']}"
             )
+            # 다음날 복습 누적을 위해 deep copy에서만 FSRS 시뮬레이션 (rating=3 가정)
+            for entry in sched["new_words"]:
+                w = sim_word_map.get(entry["word"])
+                if w:
+                    w["learned"] = True
+                    w["fsrs"] = init_fsrs_card(3, target_date)
+            for entry in sched["review_words"]:
+                w = sim_word_map.get(entry["word"])
+                if w and w.get("fsrs"):
+                    w["fsrs"] = process_review(w["fsrs"], 3, target_date)
         print(f"[AI4] {days}일 플랜 완료. 오늘 스케줄 → output/daily_schedule.json")
 
 
