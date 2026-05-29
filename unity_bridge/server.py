@@ -283,7 +283,7 @@ def schedule_recommend(body: ScheduleRecommendRequest):
 
     client = anthropic.Anthropic(api_key=api_key)
     resp = client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-6",
         max_tokens=512,
         system="당신은 영어 학습 플랜 전문가입니다. 반드시 JSON만 반환하세요.",
         messages=[{
