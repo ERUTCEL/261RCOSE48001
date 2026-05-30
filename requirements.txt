@@ -10,3 +10,6 @@ numpy
 scikit-learn
 anthropic
 scipy
+psycopg2-binary
+sqlalchemy
+alembic
