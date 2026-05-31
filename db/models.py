@@ -40,8 +40,8 @@ class OxfordWord(Base):
     __tablename__ = "oxford_words"
 
     word_id = Column(Integer, primary_key=True)
-    word = Column(String(100), unique=True, index=True, nullable=False)
-    pos = Column(String(20), nullable=True)
+    word = Column(String(200), unique=True, index=True, nullable=False)
+    pos = Column(String(100), nullable=True)
     meaning = Column(Text, nullable=True)
     rating_base = Column(Integer, nullable=False)
     rating_refined = Column(Integer, nullable=False)
