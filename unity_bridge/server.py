@@ -992,38 +992,89 @@ def recommend_ai(body: AiRecommendRequest, db: Session = Depends(get_db)):
 
 # ── Admin ─────────────────────────────────────────────────────────────────────
 
+_last_rating_update: Optional[str] = None
+
+
 @app.post("/api/admin/update-ratings")
 def update_ratings(db: Session = Depends(get_db)):
     """word_stats 누적 정답률로 oxford_words.rating_refined 자동 보정 (50회 이상)."""
+    global _last_rating_update
+
+    from sqlalchemy import func
+    total_stats = db.query(func.count(WordStat.id)).scalar() or 0
+    if total_stats == 0:
+        print("[ADMIN] update-ratings: word_stats 데이터 없음 → 종료")
+        return {"status": "no_data", "message": "word_stats 데이터 없음"}
+
     stats = crud.get_word_stats_aggregated(db, min_count=50)
     if not stats:
-        return {"updated": 0, "message": "50회 이상 데이터 없음"}
+        print(f"[ADMIN] update-ratings: 총 {total_stats}개 로그, 50회 이상 단어 없음 → 종료")
+        return {"updated": 0, "total_stats": total_stats, "message": "50회 이상 데이터 없음"}
 
     updated = 0
+    before_ratings, after_ratings = [], []
     for s in stats:
         ox = crud.get_oxford_by_word(db, s["word"])
         if not ox:
             continue
         accuracy = s["accuracy"]
-        # target accuracy for this word's difficulty vs. user pool
-        # simple heuristic: accuracy < 0.5 → rating too easy (lower), > 0.8 → too hard (raise)
         delta = 0
         if accuracy < 0.40:
-            delta = -20  # word is harder than rated → lower rating (easier for user)
+            delta = -20
         elif accuracy < 0.50:
             delta = -10
         elif accuracy > 0.85:
-            delta = +15  # word is easier than rated → raise rating
+            delta = +15
         elif accuracy > 0.75:
             delta = +8
 
         if delta != 0:
+            before_ratings.append(ox.rating_refined)
             new_rating = max(ox.rating_base - 100, min(ox.rating_base + 100, ox.rating_refined + delta))
             ox.rating_refined = new_rating
+            after_ratings.append(new_rating)
             updated += 1
 
     db.commit()
-    return {"updated": updated, "total_analyzed": len(stats)}
+
+    avg_before = round(sum(before_ratings) / len(before_ratings), 1) if before_ratings else None
+    avg_after = round(sum(after_ratings) / len(after_ratings), 1) if after_ratings else None
+    avg_delta = round(avg_after - avg_before, 1) if avg_before is not None else None
+    _last_rating_update = datetime.now().isoformat()
+
+    print(
+        f"[ADMIN] update-ratings 완료: {updated}개 보정 / {len(stats)}개 분석 / "
+        f"평균 레이팅 {avg_before} → {avg_after} (Δ{avg_delta:+})"
+        if avg_delta is not None else
+        f"[ADMIN] update-ratings 완료: 보정 대상 없음 ({len(stats)}개 분석)"
+    )
+
+    return {
+        "updated": updated,
+        "total_analyzed": len(stats),
+        "total_stats": total_stats,
+        "avg_rating_before": avg_before,
+        "avg_rating_after": avg_after,
+        "avg_rating_delta": avg_delta,
+        "timestamp": _last_rating_update,
+    }
+
+
+@app.get("/api/admin/stats")
+def admin_stats(db: Session = Depends(get_db)):
+    """전체 현황 확인 (유저 수, 로그 수, 보정 대상 단어 수, 마지막 보정 시각)."""
+    from sqlalchemy import func
+
+    total_users = db.query(func.count(WordStat.user_id.distinct())).scalar() or 0
+    total_word_stats = db.query(func.count(WordStat.id)).scalar() or 0
+    eligible = len(crud.get_word_stats_aggregated(db, min_count=50))
+
+    return {
+        "total_users": total_users,
+        "total_word_stats": total_word_stats,
+        "words_eligible_for_update": eligible,
+        "last_rating_update": _last_rating_update,
+    }
 
 
 # ── Standalone test ────────────────────────────────────────────────────────────
