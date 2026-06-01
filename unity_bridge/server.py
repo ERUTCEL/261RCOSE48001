@@ -10,9 +10,9 @@ from typing import Optional
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Query, Depends, Form
+from fastapi import FastAPI, HTTPException, UploadFile, File, Query, Depends, Form, Header
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -198,7 +198,7 @@ class CatAnswerBody(BaseModel):
 class SessionAnswer(BaseModel):
     word: str
     correct: Optional[bool] = None
-    rating_given: int = 3  # 1=Again 2=Hard 3=Good 4=Easy
+    rating_given: int = Field(default=3, ge=1, le=4)  # 1=Again 2=Hard 3=Good 4=Easy
     response_time_ms: Optional[int] = None
 
 
@@ -287,8 +287,12 @@ async def upload_csv(
     if not file.filename.endswith(".csv"):
         raise HTTPException(400, detail="CSV 파일만 허용됩니다.")
 
+    MAX_CSV_BYTES = 2 * 1024 * 1024  # 2MB
     user = require_user(db, user_id)
-    content = (await file.read()).decode("utf-8-sig", errors="replace")
+    raw = await file.read()
+    if len(raw) > MAX_CSV_BYTES:
+        raise HTTPException(413, detail=f"CSV 파일이 너무 큽니다 (최대 2MB, 현재 {len(raw)//1024}KB).")
+    content = raw.decode("utf-8-sig", errors="replace")
 
     import io, csv as _csv
     reader = _csv.DictReader(io.StringIO(content))
@@ -913,8 +917,14 @@ def recommend_ai(body: AiRecommendRequest, db: Session = Depends(get_db)):
 _last_rating_update: Optional[str] = None
 
 
+def _require_admin(x_admin_key: Optional[str] = Header(default=None)):
+    expected = os.environ.get("ADMIN_API_KEY")
+    if not expected or x_admin_key != expected:
+        raise HTTPException(401, detail="관리자 인증 필요. X-Admin-Key 헤더를 확인하세요.")
+
+
 @app.post("/api/admin/update-ratings")
-def update_ratings(db: Session = Depends(get_db)):
+def update_ratings(db: Session = Depends(get_db), _: None = Depends(_require_admin)):
     """word_stats 누적 정답률로 oxford_words.rating_refined 자동 보정 (50회 이상)."""
     global _last_rating_update
 
@@ -979,7 +989,7 @@ def update_ratings(db: Session = Depends(get_db)):
 
 
 @app.get("/api/admin/stats")
-def admin_stats(db: Session = Depends(get_db)):
+def admin_stats(db: Session = Depends(get_db), _: None = Depends(_require_admin)):
     """전체 현황 확인 (유저 수, 로그 수, 보정 대상 단어 수, 마지막 보정 시각)."""
     from sqlalchemy import func
 
