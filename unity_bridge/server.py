@@ -183,18 +183,6 @@ def _apply_fsrs_update(fsrs_rec: UserWordFSRS, rating_given: int, today: date) -
 
 # ── Request models ────────────────────────────────────────────────────────────
 
-class QuizAnswer(BaseModel):
-    order: int
-    word: str
-    correct: bool
-    response_time_ms: Optional[int] = None
-
-
-class QuizSubmit(BaseModel):
-    user_id: str
-    answers: list[QuizAnswer]
-
-
 class CatStart(BaseModel):
     user_id: str
 
@@ -457,80 +445,6 @@ def _claude_rate_words(words: list[str], meaning_hints: dict = None) -> dict:
 
 
 # ── Onboarding ────────────────────────────────────────────────────────────────
-
-@app.get("/api/onboarding/quiz")
-def get_quiz(user_id: str = Query(...), db: Session = Depends(get_db)):
-    """퀴즈 단어 샘플링 반환. Oxford DB에서 CEFR 구간별 균등 샘플링."""
-    import random
-    require_user(db, user_id)
-    oxford_words = crud.get_all_oxford(db)
-    if len(oxford_words) < 10:
-        raise HTTPException(500, detail="Oxford DB가 비어있습니다.")
-
-    questions, order = [], 1
-    for bucket_name, (lo, hi, center) in BUCKETS.items():
-        pool = [w for w in oxford_words if lo <= w.rating_refined < hi]
-        if len(pool) < QUESTIONS_PER_BUCKET:
-            margin = 50
-            while len(pool) < QUESTIONS_PER_BUCKET and margin <= 200:
-                pool = [w for w in oxford_words if (lo - margin) <= w.rating_refined < (hi + margin)]
-                margin += 50
-        sampled = random.sample(pool, min(QUESTIONS_PER_BUCKET, len(pool)))
-        for w in sampled:
-            questions.append({
-                "order": order, "word": w.word, "rating": w.rating_refined,
-                "bucket": bucket_name, "correct": None, "response_time_ms": None,
-            })
-            order += 1
-
-    random.shuffle(questions)
-    for i, q in enumerate(questions, 1):
-        q["order"] = i
-
-    return {"total_questions": len(questions), "questions": questions}
-
-
-@app.post("/api/onboarding/submit")
-def submit_quiz(body: QuizSubmit, db: Session = Depends(get_db)):
-    """퀴즈 결과 처리 → userRating 초기화."""
-    user = require_user(db, body.user_id)
-    if not body.answers:
-        raise HTTPException(400, detail="answers가 비어있습니다.")
-
-    bucket_correct = {b: 0 for b in BUCKETS}
-    bucket_total = {b: 0 for b in BUCKETS}
-
-    oxford_map = {w.word: w for w in crud.get_all_oxford(db)}
-    for ans in body.answers:
-        word_obj = oxford_map.get(ans.word)
-        if not word_obj:
-            continue
-        r = word_obj.rating_refined
-        for bname, (lo, hi, _) in BUCKETS.items():
-            if lo <= r < hi:
-                bucket_total[bname] += 1
-                if ans.correct:
-                    bucket_correct[bname] += 1
-                break
-
-    bucket_accuracy = {
-        b: bucket_correct[b] / bucket_total[b] if bucket_total[b] > 0 else 0.0
-        for b in BUCKETS
-    }
-    centers = [BUCKETS[b][2] for b in BUCKETS]
-    accuracies = [bucket_accuracy[b] for b in BUCKETS]
-    user_rating = estimate_user_rating(centers, accuracies)
-
-    user.user_rating = user_rating
-    user.rating_history = [user_rating]
-    user.k_factor = get_k_factor(0)
-    user.onboarding_completed = True
-    crud.update_user(db, user)
-
-    result = crud.user_to_dict(user)
-    result["onboarding_accuracy"] = {b: round(acc, 3) for b, acc in bucket_accuracy.items()}
-    return result
-
 
 @app.post("/api/onboarding/cat/start")
 def cat_start(body: CatStart, db: Session = Depends(get_db)):
