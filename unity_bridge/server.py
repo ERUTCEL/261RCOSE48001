@@ -14,6 +14,7 @@ from fastapi import FastAPI, HTTPException, UploadFile, File, Query, Depends, Fo
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from db.database import engine, get_db
 from db.models import Base, OxfordWord, UserWord, UserWordFSRS, WordStat
@@ -502,6 +503,7 @@ def cat_answer(body: CatAnswerBody, db: Session = Depends(get_db)):
         user.onboarding_completed = True
         state["done"] = True
         user.cat_state = state
+        flag_modified(user, "cat_state")
         crud.update_user(db, user)
         return {
             "done": True, "question_num": q_num,
@@ -519,11 +521,13 @@ def cat_answer(body: CatAnswerBody, db: Session = Depends(get_db)):
         user.onboarding_completed = True
         state["done"] = True
         user.cat_state = state
+        flag_modified(user, "cat_state")
         crud.update_user(db, user)
         return {"done": True, "question_num": q_num, "user_profile": crud.user_to_dict(user)}
 
     state["asked_words"].append(next_item["word"])
     user.cat_state = state
+    flag_modified(user, "cat_state")
     crud.update_user(db, user)
 
     return {
