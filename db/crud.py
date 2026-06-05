@@ -58,11 +58,8 @@ def get_oxford_by_word(db: Session, word: str) -> Optional[OxfordWord]:
 
 def seed_oxford_from_json(db: Session, words: list[dict]) -> int:
     """Bulk-insert oxford_words from refined_db.json data. Returns inserted count."""
-    count = 0
-    for w in words:
-        if db.query(OxfordWord).filter(OxfordWord.word == w["word"]).first():
-            continue
-        db.add(OxfordWord(
+    objects = [
+        OxfordWord(
             word_id=w["id"],
             word=w["word"],
             pos=w.get("pos"),
@@ -72,10 +69,12 @@ def seed_oxford_from_json(db: Session, words: list[dict]) -> int:
             syllables=w.get("syllables"),
             wordfreq_score=w.get("wordfreq_score"),
             abstraction_score=w.get("abstraction_score"),
-        ))
-        count += 1
+        )
+        for w in words
+    ]
+    db.bulk_save_objects(objects)
     db.commit()
-    return count
+    return len(objects)
 
 
 # ── UserWord ─────────────────────────────────────────────────────────────────
