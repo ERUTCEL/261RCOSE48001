@@ -4,7 +4,6 @@ python-multipart
 python-dotenv
 pandas
 openpyxl
-sentence-transformers
 wordfreq
 numpy
 scikit-learn
