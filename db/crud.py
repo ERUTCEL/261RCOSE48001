@@ -83,14 +83,16 @@ def get_user_word(db: Session, word: str) -> Optional[UserWord]:
     return db.query(UserWord).filter(UserWord.word == word).first()
 
 
-def upsert_user_word(db: Session, word: str, rating: int, confidence: float, source: str) -> UserWord:
+def upsert_user_word(db: Session, word: str, rating: int, confidence: float, source: str, meaning: str = None) -> UserWord:
     existing = get_user_word(db, word)
     if existing:
         existing.rating_predicted = rating
         existing.confidence = confidence
         existing.source = source
+        if meaning and not existing.meaning:
+            existing.meaning = meaning
     else:
-        existing = UserWord(word=word, rating_predicted=rating, confidence=confidence, source=source)
+        existing = UserWord(word=word, rating_predicted=rating, confidence=confidence, source=source, meaning=meaning)
         db.add(existing)
     db.flush()
     return existing
@@ -106,15 +108,13 @@ def get_all_fsrs(db: Session, user_id: str) -> list[UserWordFSRS]:
     return db.query(UserWordFSRS).filter_by(user_id=user_id).all()
 
 
-def upsert_fsrs_queued(db: Session, user_id: str, word: str, source: str, custom_meaning: str = None) -> UserWordFSRS:
+def upsert_fsrs_queued(db: Session, user_id: str, word: str, source: str) -> UserWordFSRS:
     """Add word to user's pool with state=queued if not already present."""
     existing = get_fsrs(db, user_id, word)
     if not existing:
-        existing = UserWordFSRS(user_id=user_id, word=word, word_source=source, state="queued", custom_meaning=custom_meaning)
+        existing = UserWordFSRS(user_id=user_id, word=word, word_source=source, state="queued")
         db.add(existing)
         db.flush()
-    elif custom_meaning and not existing.custom_meaning:
-        existing.custom_meaning = custom_meaning
     return existing
 
 
