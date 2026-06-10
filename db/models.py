@@ -71,6 +71,7 @@ class UserWordFSRS(Base):
     user_id = Column(GUID, ForeignKey("users.user_id"), nullable=False, index=True)
     word = Column(String(100), nullable=False, index=True)
     word_source = Column(String(10), nullable=False)  # "oxford" or "user"
+    custom_meaning = Column(String(500), nullable=True)
     stability = Column(Float, nullable=True)
     difficulty = Column(Float, nullable=True)
     due_date = Column(Date, nullable=True)

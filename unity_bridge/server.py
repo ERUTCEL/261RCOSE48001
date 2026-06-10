@@ -328,7 +328,7 @@ async def upload_csv(
         word = entry["word"]
         if word in oxford_map:
             matched.append(word)
-            crud.upsert_fsrs_queued(db, user_id, word, "oxford")
+            crud.upsert_fsrs_queued(db, user_id, word, "oxford", entry["meaning"])
         else:
             unmatched.append(entry)
 
@@ -347,7 +347,8 @@ async def upload_csv(
                 if r.get("low_confidence"):
                     source = "predicted_low_conf"
                 crud.upsert_user_word(db, r["word"], rating, confidence, source)
-                crud.upsert_fsrs_queued(db, user_id, r["word"], "user")
+                meaning = next((u["meaning"] for u in unmatched if u["word"] == r["word"]), None)
+                crud.upsert_fsrs_queued(db, user_id, r["word"], "user", meaning)
                 predicted_count += 1
         else:
             # Fallback: Claude API batch prediction
@@ -362,7 +363,7 @@ async def upload_csv(
                 source = "api_verified" if word in api_result else "predicted"
                 confidence = 0.9 if word in api_result else 0.6
                 crud.upsert_user_word(db, word, rating, confidence, source)
-                crud.upsert_fsrs_queued(db, user_id, word, "user")
+                crud.upsert_fsrs_queued(db, user_id, word, "user", entry["meaning"])
                 if word in api_result:
                     api_verified_count += 1
                 else:
