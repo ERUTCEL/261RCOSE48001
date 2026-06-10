@@ -193,7 +193,7 @@ def _bisect_rating(centers: list, accuracies: list, scale: float) -> int:
 # ── CAT (Computerized Adaptive Testing) ──────────────────────────────────────
 
 CAT_MAX_QUESTIONS = 25
-CAT_MIN_QUESTIONS = 8
+CAT_MIN_QUESTIONS = 14
 CAT_SE_THRESHOLD = 75.0
 CAT_PRIOR_MEAN = 400.0
 CAT_PRIOR_SD = 200.0
