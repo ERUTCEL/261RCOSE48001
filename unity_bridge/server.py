@@ -13,6 +13,7 @@ load_dotenv()
 from fastapi import FastAPI, HTTPException, UploadFile, File, Query, Depends, Form, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+import sqlalchemy as sa
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -44,9 +45,21 @@ QUESTIONS_PER_BUCKET = 20
 def startup() -> None:
     try:
         Base.metadata.create_all(bind=engine)
+        _migrate_schema()
         _seed_oxford_if_empty()
     except Exception as e:
         print(f"[STARTUP] DB 초기화 실패 (나중에 재시도 가능): {e}")
+
+
+def _migrate_schema() -> None:
+    """Add columns that create_all misses on existing tables."""
+    try:
+        with engine.connect() as conn:
+            conn.execute(sa.text("ALTER TABLE user_words ADD COLUMN meaning TEXT"))
+            conn.commit()
+        print("[MIGRATE] user_words.meaning 컬럼 추가 완료")
+    except Exception:
+        pass  # column already exists
 
 
 def _seed_oxford_if_empty() -> None:
@@ -339,6 +352,7 @@ async def upload_csv(
     if unmatched:
         # Try KNN first (embeddings_cache.pkl)
         knn_results = _knn_predict_words([u["word"] for u in unmatched])
+        unmatched_meaning_map = {u["word"]: u["meaning"] for u in unmatched}
         if knn_results:
             for r in knn_results:
                 source = "predicted"
@@ -346,8 +360,7 @@ async def upload_csv(
                 confidence = r["confidence"]
                 if r.get("low_confidence"):
                     source = "predicted_low_conf"
-                meaning = next((u["meaning"] for u in unmatched if u["word"] == r["word"]), None)
-                crud.upsert_user_word(db, r["word"], rating, confidence, source, meaning)
+                crud.upsert_user_word(db, r["word"], rating, confidence, source, meaning=unmatched_meaning_map.get(r["word"]))
                 crud.upsert_fsrs_queued(db, user_id, r["word"], "user")
                 predicted_count += 1
         else:
@@ -362,7 +375,7 @@ async def upload_csv(
                 rating = info.get("rating", 400)
                 source = "api_verified" if word in api_result else "predicted"
                 confidence = 0.9 if word in api_result else 0.6
-                crud.upsert_user_word(db, word, rating, confidence, source, entry["meaning"])
+                crud.upsert_user_word(db, word, rating, confidence, source, meaning=entry["meaning"])
                 crud.upsert_fsrs_queued(db, user_id, word, "user")
                 if word in api_result:
                     api_verified_count += 1

@@ -83,7 +83,7 @@ def get_user_word(db: Session, word: str) -> Optional[UserWord]:
     return db.query(UserWord).filter(UserWord.word == word).first()
 
 
-def upsert_user_word(db: Session, word: str, rating: int, confidence: float, source: str, meaning: str = None) -> UserWord:
+def upsert_user_word(db: Session, word: str, rating: int, confidence: float, source: str, meaning: Optional[str] = None) -> UserWord:
     existing = get_user_word(db, word)
     if existing:
         existing.rating_predicted = rating
@@ -181,7 +181,7 @@ def build_rated_words_dict(db: Session, user_id: str) -> dict:
         elif fsrs.word_source == "user" and word in user_word_map:
             uw = user_word_map[word]
             entry = {
-                "word": word, "pos": None, "meaning": None,
+                "word": word, "pos": None, "meaning": uw.meaning,
                 "rating": uw.rating_predicted, "source": uw.source, "confidence": uw.confidence,
             }
         else:

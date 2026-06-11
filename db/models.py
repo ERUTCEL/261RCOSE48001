@@ -58,8 +58,8 @@ class UserWord(Base):
     word = Column(String(100), unique=True, index=True, nullable=False)
     rating_predicted = Column(Integer, nullable=False)
     confidence = Column(Float, default=0.5)
-    meaning = Column(Text, nullable=True)
     source = Column(String(50), default="predicted")  # predicted / api_verified / ai_recommended
+    meaning = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
