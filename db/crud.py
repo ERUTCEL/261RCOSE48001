@@ -83,6 +83,10 @@ def get_user_word(db: Session, word: str) -> Optional[UserWord]:
     return db.query(UserWord).filter(UserWord.word == word).first()
 
 
+def get_user_words_by_list(db: Session, words: list[str]) -> list[UserWord]:
+    return db.query(UserWord).filter(UserWord.word.in_(words)).all()
+
+
 def upsert_user_word(db: Session, word: str, rating: int, confidence: float, source: str, meaning: Optional[str] = None) -> UserWord:
     existing = get_user_word(db, word)
     if existing:

@@ -336,12 +336,21 @@ async def upload_csv(
         raise HTTPException(400, detail="CSV가 비어있습니다.")
 
     oxford_map = {w.word: w for w in crud.get_all_oxford(db)}
-    matched, unmatched = [], []
+    all_words = [e["word"] for e in user_words_clean]
+    existing_rated = {w.word: w for w in crud.get_user_words_by_list(db, all_words)}
+
+    matched, already_rated, unmatched = [], [], []
     for entry in user_words_clean:
         word = entry["word"]
         if word in oxford_map:
             matched.append(word)
             crud.upsert_fsrs_queued(db, user_id, word, "oxford")
+        elif word in existing_rated:
+            already_rated.append(entry)
+            uw = existing_rated[word]
+            if entry["meaning"] and not uw.meaning:
+                uw.meaning = entry["meaning"]
+            crud.upsert_fsrs_queued(db, user_id, word, "user")
         else:
             unmatched.append(entry)
 
@@ -387,8 +396,9 @@ async def upload_csv(
     return {
         "status": "ok",
         "user_id": user_id,
-        "total_words": len(matched) + len(unmatched),
+        "total_words": len(matched) + len(already_rated) + len(unmatched),
         "oxford_matched": len(matched),
+        "already_rated": len(already_rated),
         "predicted": predicted_count,
         "api_verified": api_verified_count,
     }
